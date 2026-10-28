@@ -1,0 +1,4 @@
+starlette>=0.37
+uvicorn>=0.29
+boto3>=1.34        # only for the DynamoDB event sink on AWS
+# crewai[bedrock]  # uncomment when you wire LLM agents (crew_agents.py)

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exorcism Protocol</title>
+<style>
+  :root { --bg:#0b0d0b; --panel:#141814; --line:#263026; --ink:#e6f0e6; --dim:#8fa38f;
+          --green:#33ff66; --amber:#ffb000; --red:#ff4d5e; --violet:#b48cff; --blue:#5fb4ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 ui-monospace,Menlo,Consolas,monospace; }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:16px 20px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-size:20px; color:var(--green); letter-spacing:.04em; }
+  header .sub { color:var(--dim); }
+  header form { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  input, button { font:inherit; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:6px 10px; }
+  input { width:80px; } button { cursor:pointer; border-color:var(--green); color:var(--green); }
+  main { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:16px 20px; }
+  @media (max-width: 900px) { main { grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; min-width:0; }
+  .panel h2 { margin:0 0 10px; font-size:16px; display:flex; justify-content:space-between; }
+  .panel.swarm h2 span:first-child { color:var(--green); } .panel.baseline h2 span:first-child { color:var(--amber); }
+  .tick { color:var(--dim); font-weight:400; }
+  .scores { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  .score { border:1px solid var(--line); border-radius:8px; padding:8px; }
+  .score b { display:block; font-size:22px; } .score small { color:var(--dim); }
+  .grid { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-bottom:6px; }
+  .room { position:relative; border:1px solid var(--line); border-radius:6px; padding:6px; min-height:58px; font-size:12px; }
+  .room .id { color:var(--dim); } .room .civ { position:absolute; right:6px; top:6px; }
+  .room .tag { display:block; margin-top:4px; font-weight:700; }
+  .room.anomaly { background:#3a1018; border-color:var(--red); } .room.anomaly .tag { color:var(--red); }
+  .room.sealed { outline:2px dashed var(--violet); outline-offset:-4px; }
+  .room.evac { border-color:var(--green); } .room.overrun { background:#000; color:#555; }
+  .room .team { color:var(--blue); }
+  .zone { color:var(--dim); font-size:11px; margin:2px 0 6px; }
+  .legend { color:var(--dim); font-size:11px; margin-bottom:10px; }
+  .feed { height:260px; overflow:auto; border-top:1px solid var(--line); padding-top:8px; font-size:12px; }
+  .feed div { padding:2px 0; border-bottom:1px solid #1b211b; }
+  .feed .t { color:var(--dim); } .feed .src { color:var(--blue); }
+  .feed .CONF { color:var(--red); } .feed .DISM { color:var(--green); } .feed .REJ { color:var(--amber); } .feed .CONT { color:var(--green); }
+</style>
+</head>
+<body>
+<header>
+  <h1>EXORCISM PROTOCOL</h1>
+  <span class="sub">Supervised swarm vs single agent, same outbreak</span>
+  <form id="f"><label>seed <input id="seed" type="number" value="42"></label><button>Run</button></form>
+</header>
+<main>
+  <section class="panel swarm" id="swarm"></section>
+  <section class="panel baseline" id="baseline"></section>
+</main>
+<script>
+const TITLES = { swarm: "Swarm (7 agents)", baseline: "Baseline (1 agent)" };
+for (const m of ["swarm", "baseline"]) {
+  document.getElementById(m).innerHTML = `
+    <h2><span>${TITLES[m]}</span><span class="tick" data-k="tick">waiting</span></h2>
+    <div class="scores">
+      <div class="score"><small>containment (ticks, lower)</small><b data-k="speed">-</b></div>
+      <div class="score"><small>false alarms (lower)</small><b data-k="fa">-</b></div>
+      <div class="score"><small>civilians saved</small><b data-k="saved">-</b></div>
+    </div>
+    <div class="zone">West W1-W10</div><div class="grid" data-k="gw"></div>
+    <div class="zone">East E1-E10</div><div class="grid" data-k="ge"></div>
+    <div class="legend">red = anomaly · dashed = sealed · green border = evacuating · T = team on site</div>
+    <div class="feed" data-k="feed"></div>`;
+}
+const $ = (m, k) => document.querySelector(`#${m} [data-k="${k}"]`);
+
+function line(e) {
+  const p = e.payload || {};
+  switch (e.type) {
+    case "SIGHTING_REPORTED": return ["", `sighting in ${e.room} (conf ${e.confidence}, suspects ${p.suspected})`];
+    case "SIGHTING_CONFIRMED": return ["CONF", `CONFIRMED ${p.kind} in ${e.room}`];
+    case "SIGHTING_DISMISSED": return ["DISM", `dismissed ${e.room}: false alarm`];
+    case "PLAYBOOK_FOUND": return ["", `playbook for ${p.kind}${p.live ? " (You.com)" : ""}${p.cached ? " [cached]" : ""}`];
+    case "ACTION_PROPOSED": return ["", `proposes ${p.action} ${e.room}`];
+    case "ACTION_APPROVED": return ["", `approved ${p.action} ${e.room}`];
+    case "ACTION_REJECTED": return ["REJ", `held ${p.action} ${e.room}: ${p.decision || p.reason}`];
+    case "ACTION_EXECUTED": return ["", `${p.action} ${e.room}${p.real === false ? "  (nothing there)" : ""}`];
+    case "ANOMALY_CONTAINED": return ["CONT", `CONTAINED ${p.kind} in ${e.room} after ${p.ticks} ticks`];
+    case "CIVILIAN_STATUS": return p.lost ? ["CONF", `${p.lost} civilians lost in ${e.room}`] : ["DISM", `${e.room} fully evacuated`];
+  }
+  return ["", e.type];
+}
+
+function render(msg) {
+  const m = msg.mode, s = msg.snapshot, sc = s.score;
+  $(m, "tick").textContent = `tick ${s.tick}`;
+  $(m, "speed").textContent = sc.containment_speed;
+  $(m, "fa").textContent = Math.round(sc.false_alarm_rate * 100) + "%";
+  $(m, "saved").textContent = `${sc.civilians_saved}/${sc.civilians_total}`;
+  for (const [k, z] of [["gw", "W"], ["ge", "E"]]) {
+    $(m, k).innerHTML = s.rooms.filter(r => r.id[0] === z).map(r => {
+      const cls = ["room", r.anomaly && "anomaly", r.sealed && "sealed", r.evac && "evac", r.overrun && "overrun"].filter(Boolean).join(" ");
+      return `<div class="${cls}"><span class="id">${r.id}</span><span class="civ">${r.civ ? r.civ + "p" : ""}</span>
+        <span class="tag">${r.overrun ? "LOST" : (r.anomaly || "")}${r.team ? ' <span class="team">T</span>' : ""}</span></div>`;
+    }).join("");
+  }
+  const feed = $(m, "feed");
+  for (const e of msg.feed) {
+    const [c, text] = line(e);
+    const d = document.createElement("div");
+    d.className = c;
+    d.innerHTML = `<span class="t">t${e.tick}</span> <span class="src">${e.source}</span> ${text}`;
+    feed.prepend(d);
+  }
+}
+
+const es = new EventSource("/stream");
+es.onmessage = ev => render(JSON.parse(ev.data));
+document.getElementById("f").onsubmit = ev => {
+  ev.preventDefault();
+  document.querySelectorAll('[data-k="feed"]').forEach(f => f.innerHTML = "");
+  fetch(`/start?seed=${document.getElementById("seed").value}`, { method: "POST" });
+};
+</script>
+</body>
+</html>
